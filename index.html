@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nour - Prières, Coran et Duas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="entete">
+    <h1>نور <span>Nour</span></h1>
+    <p id="date-hijri"></p>
+  </header>
+
+  <nav class="onglets">
+    <button class="tab active" data-target="priere">🕌 Prières</button>
+    <button class="tab" data-target="coran">📖 Coran</button>
+    <button class="tab" data-target="duas">🤲 Duas</button>
+    <button class="tab" data-target="tasbih">📿 Tasbih</button>
+  </nav>
+
+  <main>
+
+    <!-- ================= PRIÈRES ================= -->
+    <section id="priere" class="section active">
+      <div class="carte prochaine">
+        <p class="petit">Prochaine prière</p>
+        <h2 id="prochaine-nom">--</h2>
+        <div id="compte-a-rebours">--:--:--</div>
+        <p id="lieu" class="petit"></p>
+      </div>
+
+      <div class="carte">
+        <h3>Choisir le lieu</h3>
+        <div class="formulaire">
+          <input type="text" id="ville" placeholder="Ville (ex : Lagos)">
+          <input type="text" id="pays" placeholder="Pays (ex : Nigeria)">
+          <select id="methode">
+            <option value="3">Ligue islamique mondiale</option>
+            <option value="2">ISNA (Amérique du Nord)</option>
+            <option value="4">Umm al-Qura (La Mecque)</option>
+            <option value="5">Égypte</option>
+            <option value="12">UOIF (France)</option>
+            <option value="21">Maroc</option>
+          </select>
+          <button id="btn-chercher">Chercher</button>
+          <button id="btn-geo" class="secondaire">📍 Me localiser</button>
+        </div>
+        <button id="btn-notif" class="secondaire">🔔 Activer les rappels</button>
+      </div>
+
+      <div id="liste-prieres" class="grille"></div>
+    </section>
+
+    <!-- ================= CORAN ================= -->
+    <section id="coran" class="section">
+      <div id="vue-liste">
+        <input type="text" id="recherche-sourate" class="recherche" placeholder="Chercher une sourate (nom ou numéro)...">
+        <div id="liste-sourates" class="grille"></div>
+      </div>
+
+      <div id="vue-lecture" class="cache">
+        <button id="btn-retour" class="secondaire">← Retour</button>
+        <h2 id="titre-sourate"></h2>
+        <audio id="lecteur" controls></audio>
+        <div id="versets"></div>
+      </div>
+    </section>
+
+    <!-- ================= DUAS ================= -->
+    <section id="duas" class="section">
+      <input type="text" id="recherche-dua" class="recherche" placeholder="Chercher une dua...">
+      <div id="liste-duas"></div>
+    </section>
+
+    <!-- ================= TASBIH ================= -->
+    <section id="tasbih" class="section">
+      <div class="carte centre">
+        <select id="dhikr"></select>
+        <p id="dhikr-ar" class="arabe grand"></p>
+        <div id="compteur">0</div>
+        <p class="petit">Objectif : <select id="objectif">
+          <option value="33">33</option>
+          <option value="99">99</option>
+          <option value="100">100</option>
+          <option value="0">Sans limite</option>
+        </select></p>
+        <button id="btn-compter">Compter</button>
+        <button id="btn-reset" class="secondaire">Remettre à zéro</button>
+        <p class="petit">Total aujourd'hui : <strong id="total-jour">0</strong></p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Que Allah accepte nos prières et nos invocations 🤍</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
