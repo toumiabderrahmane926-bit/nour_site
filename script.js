@@ -1,38 +1,59 @@
 // =====================================================
-//  Nour - Prières, Coran, Duas et Tasbih
-//  APIs utilisées (gratuites, sans clé) :
-//   - Aladhan  : horaires de prière
-//   - AlQuran Cloud : texte du Coran + audio
+//  الحافظ (Al-Hafiz)
+//  Prières, Coran, Duas, Tasbih et Sadaqa Jariya
+//
+//  APIs gratuites utilisées (sans clé) :
+//   - Aladhan       : horaires de prière
+//   - AlQuran Cloud : texte du Coran, traductions et audio
 // =====================================================
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
+// Petit utilitaire pour créer un élément avec du texte (plus sûr que innerHTML)
+function creer(tag, classe, texte) {
+  const e = document.createElement(tag);
+  if (classe) e.className = classe;
+  if (texte !== undefined) e.textContent = texte;
+  return e;
+}
+
+// Lecture/écriture sécurisées du localStorage
+function lire(cle, defaut) {
+  try {
+    const v = localStorage.getItem(cle);
+    return v === null ? defaut : v;
+  } catch (e) { return defaut; }
+}
+function ecrire(cle, valeur) {
+  try { localStorage.setItem(cle, valeur); } catch (e) { /* pas grave */ }
+}
+
 // ---------- Gestion des onglets ----------
+function activerOnglet(id) {
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.target === id));
+  $$('.section').forEach((s) => s.classList.toggle('active', s.id === id));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 $$('.tab').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    $$('.tab').forEach((b) => b.classList.remove('active'));
-    $$('.section').forEach((s) => s.classList.remove('active'));
-    btn.classList.add('active');
-    $('#' + btn.dataset.target).classList.add('active');
-  });
+  btn.addEventListener('click', () => activerOnglet(btn.dataset.target));
 });
 
 
 // =====================================================
-//  1. HORAIRES DE PRIÈRE
+//  1. HORAIRES DE PRIÈRE + NOTIFICATION
 // =====================================================
 const PRIERES = [
   { cle: 'Fajr',    nom: 'Fajr',            ar: 'الفجر',   priere: true },
   { cle: 'Sunrise', nom: 'Lever du soleil', ar: 'الشروق',  priere: false },
   { cle: 'Dhuhr',   nom: 'Dhuhr',           ar: 'الظهر',   priere: true },
-  { cle: 'Asr',     nom: 'Asr',             ar: 'العصر', priere: true },
+  { cle: 'Asr',     nom: 'Asr',             ar: 'العصر',   priere: true },
   { cle: 'Maghrib', nom: 'Maghrib',         ar: 'المغرب',  priere: true },
   { cle: 'Isha',    nom: 'Isha',            ar: 'العشاء',  priere: true },
 ];
 
-let horaires = {};          // { Fajr: Date, Dhuhr: Date, ... }
-let dejaNotifie = new Set(); // pour ne notifier qu'une fois par prière
+let horaires = {};           // { Fajr: Date, Dhuhr: Date, ... }
+let dejaNotifie = new Set(); // pour ne déclencher qu'une fois par prière
 
 function dateDuJour() {
   const d = new Date();
@@ -76,7 +97,7 @@ async function chargerHoraires(lieu) {
       ? `📍 ${lieu.ville}, ${lieu.pays}`
       : `📍 Ma position`;
 
-    localStorage.setItem('nour-lieu', JSON.stringify(lieu));
+    ecrire('hafiz-lieu', JSON.stringify(lieu));
     dejaNotifie.clear();
     afficherPrieres();
     tick();
@@ -92,13 +113,11 @@ function afficherPrieres() {
   PRIERES.forEach((p) => {
     const d = horaires[p.cle];
     const heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const div = document.createElement('div');
-    div.className = 'priere-carte';
+    const div = creer('div', 'priere-carte');
     div.id = 'carte-' + p.cle;
-    div.innerHTML = `
-      <div class="ar">${p.ar}</div>
-      <div class="nom">${p.nom}</div>
-      <div class="heure">${heure}</div>`;
+    div.appendChild(creer('div', 'ar', p.ar));
+    div.appendChild(creer('div', 'nom', p.nom));
+    div.appendChild(creer('div', 'heure', heure));
     conteneur.appendChild(div);
   });
 }
@@ -144,6 +163,7 @@ function tick() {
   });
 }
 
+// ---------- Son (utilisé par le tasbih quand l'objectif est atteint) ----------
 function bip() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -161,14 +181,36 @@ function bip() {
   } catch (e) { /* pas grave */ }
 }
 
-function notifier(p) {
-  bip();
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`C'est l'heure de ${p.nom}`, { body: 'Il est temps de prier 🕌' });
-  }
+// ---------- Notification à l'heure de la prière ----------
+const NOMS_AR = {
+  Fajr: 'صلاة الفجر',
+  Dhuhr: 'صلاة الظهر',
+  Asr: 'صلاة العصر',
+  Maghrib: 'صلاة المغرب',
+  Isha: 'صلاة العشاء',
+};
+
+// Service worker : nécessaire pour que les notifications marchent sur téléphone
+let swPret = null;
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  swPret = navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null);
 }
 
-// Boutons
+async function afficherNotification(titre, corps) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  const options = { body: corps, icon: 'logo.png', badge: 'logo.png', lang: 'ar', dir: 'rtl', tag: 'hafiz-priere' };
+  try {
+    const reg = swPret ? await swPret : null;
+    if (reg) { await reg.showNotification(titre, options); return true; }
+  } catch (e) { /* on essaie la méthode classique */ }
+  try { new Notification(titre, options); return true; } catch (e) { return false; }
+}
+
+function notifier(p) {
+  afficherNotification(NOMS_AR[p.cle] || p.ar, 'حان وقت الصلاة 🕌');
+}
+
+// Boutons du lieu
 $('#btn-chercher').addEventListener('click', () => {
   const ville = $('#ville').value.trim();
   const pays = $('#pays').value.trim();
@@ -187,11 +229,16 @@ $('#btn-geo').addEventListener('click', () => {
 $('#btn-notif').addEventListener('click', async () => {
   if (!('Notification' in window)) return alert('Notifications non supportées.');
   const rep = await Notification.requestPermission();
-  alert(rep === 'granted' ? 'Rappels activés ✅ (garde cet onglet ouvert)' : 'Rappels refusés.');
+  if (rep === 'granted') {
+    afficherNotification('صلاة المغرب', 'حان وقت الصلاة 🕌');
+    alert('Notifications activées ✅ (garde cet onglet ouvert)');
+  } else {
+    alert('Notifications refusées. Autorise-les dans les réglages du navigateur pour ce site.');
+  }
 });
 
 $('#methode').addEventListener('change', () => {
-  const sauve = localStorage.getItem('nour-lieu');
+  const sauve = lire('hafiz-lieu', null);
   if (sauve) chargerHoraires(JSON.parse(sauve));
 });
 
@@ -199,7 +246,7 @@ setInterval(tick, 1000);
 
 // Au démarrage : on recharge le dernier lieu sauvegardé
 (function initPriere() {
-  const sauve = localStorage.getItem('nour-lieu');
+  const sauve = lire('hafiz-lieu', null);
   if (sauve) {
     const lieu = JSON.parse(sauve);
     if (lieu.ville) { $('#ville').value = lieu.ville; $('#pays').value = lieu.pays; }
@@ -211,10 +258,38 @@ setInterval(tick, 1000);
 
 
 // =====================================================
-//  2. CORAN
+//  2. CORAN (lecteurs + traductions français / anglais)
 // =====================================================
 const API_CORAN = 'https://api.alquran.cloud/v1';
+
+// [identifiant, nom du lecteur]
+const LECTEURS = [
+  ['ar.alafasy',              'Mishary Alafasy'],
+  ['ar.abdulbasitmurattal',   'Abdul Basit (Murattal)'],
+  ['ar.abdurrahmaansudais',   'Abdurrahmaan As-Sudais'],
+  ['ar.husary',               'Mahmoud Khalil Al-Husary'],
+  ['ar.minshawi',             'Mohamed Siddiq Al-Minshawi'],
+  ['ar.mahermuaiqly',         'Maher Al-Muaiqly'],
+  ['ar.saoodshuraym',         'Saood Ash-Shuraym'],
+  ['ar.hudhaify',             'Ali Al-Hudhaify'],
+  ['ar.shaatree',             'Abu Bakr Ash-Shaatree'],
+  ['ar.ahmedajamy',           'Ahmed Al-Ajamy'],
+];
+
+// Débits essayés dans l'ordre (tous les lecteurs n'ont pas le même)
+const DEBITS = [128, 192, 64, 48, 40, 32];
+
 let toutesSourates = [];
+let sourateCourante = null;
+let essaiAudio = 0;
+
+LECTEURS.forEach(([id, nom]) => {
+  const opt = creer('option', '', nom);
+  opt.value = id;
+  $('#lecteur-choix').appendChild(opt);
+});
+$('#lecteur-choix').value = lire('hafiz-lecteur', 'ar.alafasy');
+$('#traduction-choix').value = lire('hafiz-traduction', 'fr');
 
 async function chargerSourates() {
   try {
@@ -223,7 +298,7 @@ async function chargerSourates() {
     toutesSourates = json.data;
     afficherSourates(toutesSourates);
   } catch (e) {
-    $('#liste-sourates').innerHTML = '<p>Erreur de chargement. Vérifie ta connexion.</p>';
+    $('#liste-sourates').textContent = 'Erreur de chargement. Vérifie ta connexion.';
   }
 }
 
@@ -231,12 +306,10 @@ function afficherSourates(liste) {
   const conteneur = $('#liste-sourates');
   conteneur.innerHTML = '';
   liste.forEach((s) => {
-    const div = document.createElement('div');
-    div.className = 'sourate-item';
-    div.innerHTML = `
-      <div class="num">${s.number}</div>
-      <div class="ar">${s.name}</div>
-      <div class="fr">${s.englishName} · ${s.numberOfAyahs} versets</div>`;
+    const div = creer('div', 'sourate-item');
+    div.appendChild(creer('div', 'num', s.number));
+    div.appendChild(creer('div', 'ar', s.name));
+    div.appendChild(creer('div', 'fr', `${s.englishName} · ${s.numberOfAyahs} versets`));
     div.addEventListener('click', () => ouvrirSourate(s));
     conteneur.appendChild(div);
   });
@@ -253,36 +326,103 @@ $('#recherche-sourate').addEventListener('input', (e) => {
   afficherSourates(filtre);
 });
 
-async function ouvrirSourate(s) {
+// ----- Audio -----
+function urlAudio(numero, lecteur, debit) {
+  return `https://cdn.islamic.network/quran/audio-surah/${debit}/${lecteur}/${numero}.mp3`;
+}
+
+function chargerAudio() {
+  essaiAudio = 0;
+  $('#msg-audio').textContent = '';
+  $('#lecteur').src = urlAudio(sourateCourante.number, $('#lecteur-choix').value, DEBITS[0]);
+}
+
+// Si le fichier n'existe pas avec ce débit, on essaie le suivant
+$('#lecteur').addEventListener('error', () => {
+  if (!sourateCourante) return;
+  essaiAudio++;
+  if (essaiAudio < DEBITS.length) {
+    $('#lecteur').src = urlAudio(sourateCourante.number, $('#lecteur-choix').value, DEBITS[essaiAudio]);
+  } else {
+    $('#msg-audio').textContent = "Audio indisponible pour ce lecteur. Essaie un autre lecteur ou vérifie ta connexion.";
+  }
+});
+
+$('#lecteur-choix').addEventListener('change', (e) => {
+  ecrire('hafiz-lecteur', e.target.value);
+  if (sourateCourante) chargerAudio();
+});
+
+// ----- Texte et traductions -----
+// Retire les voyelles et signes pour comparer du texte arabe
+function nettoyerArabe(t) {
+  return t.replace(/[ً-ٰٟۖ-ۭـ]/g, '').replace(/ٱ/g, 'ا');
+}
+
+// Dans cette édition, le 1er verset de chaque sourate (sauf Al-Fatiha) commence par la Basmala.
+// On la sépare pour l'afficher à part.
+function separerBasmala(texte, numeroSourate, numeroVerset) {
+  if (numeroVerset !== 1 || numeroSourate === 1 || numeroSourate === 9) return { basmala: false, texte };
+  if (!nettoyerArabe(texte).startsWith('بسم الله الرحمن الرحيم')) return { basmala: false, texte };
+  return { basmala: true, texte: texte.split(' ').slice(4).join(' ') };
+}
+
+async function chargerTexte() {
+  const s = sourateCourante;
+  const choix = $('#traduction-choix').value;
+  const editions = ['quran-uthmani'];
+  if (choix.includes('fr')) editions.push('fr.hamidullah');
+  if (choix.includes('en')) editions.push('en.sahih');
+
+  const conteneur = $('#versets');
+  conteneur.textContent = 'Chargement...';
+
+  try {
+    const rep = await fetch(`${API_CORAN}/surah/${s.number}/editions/${editions.join(',')}`);
+    const json = await rep.json();
+    const trouve = (id) => json.data.find((e) => e.edition.identifier === id);
+
+    const arabe = trouve('quran-uthmani').ayahs;
+    const traductions = [];
+    if (trouve('fr.hamidullah')) traductions.push({ etiquette: 'FR', ayahs: trouve('fr.hamidullah').ayahs });
+    if (trouve('en.sahih'))      traductions.push({ etiquette: 'EN', ayahs: trouve('en.sahih').ayahs });
+
+    conteneur.innerHTML = '';
+    arabe.forEach((v, i) => {
+      const { basmala, texte } = separerBasmala(v.text, s.number, v.numberInSurah);
+      if (basmala) conteneur.appendChild(creer('p', 'bismillah', 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ'));
+
+      const div = creer('div', 'verset');
+      const p = creer('p', 'arabe', texte + ' ');
+      p.appendChild(creer('span', 'numero', v.numberInSurah));
+      div.appendChild(p);
+
+      traductions.forEach((t) => {
+        const tr = creer('p', 'traduction');
+        tr.appendChild(creer('span', 'tag', t.etiquette));
+        tr.appendChild(document.createTextNode(t.ayahs[i].text));
+        div.appendChild(tr);
+      });
+      conteneur.appendChild(div);
+    });
+  } catch (e) {
+    conteneur.textContent = 'Erreur de chargement de la sourate.';
+  }
+}
+
+$('#traduction-choix').addEventListener('change', (e) => {
+  ecrire('hafiz-traduction', e.target.value);
+  if (sourateCourante) chargerTexte();
+});
+
+function ouvrirSourate(s) {
+  sourateCourante = s;
   $('#vue-liste').classList.add('cache');
   $('#vue-lecture').classList.remove('cache');
   $('#titre-sourate').textContent = s.name;
-  $('#versets').innerHTML = '<p class="centre">Chargement...</p>';
-
-  // Audio (récitation de Mishary Alafasy)
-  $('#lecteur').src = `https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy/${s.number}.mp3`;
-
-  try {
-    // On demande le texte arabe ET la traduction française en une seule requête
-    const rep = await fetch(`${API_CORAN}/surah/${s.number}/editions/quran-uthmani,fr.hamidullah`);
-    const json = await rep.json();
-    const arabe = json.data[0].ayahs;
-    const francais = json.data[1].ayahs;
-
-    const conteneur = $('#versets');
-    conteneur.innerHTML = '';
-    arabe.forEach((v, i) => {
-      const div = document.createElement('div');
-      div.className = 'verset';
-      div.innerHTML = `
-        <p class="arabe"><span class="numero">${v.numberInSurah}</span>${v.text}</p>
-        <p class="traduction">${francais[i].text}</p>`;
-      conteneur.appendChild(div);
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  } catch (e) {
-    $('#versets').innerHTML = '<p>Erreur de chargement de la sourate.</p>';
-  }
+  chargerAudio();
+  chargerTexte();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 $('#btn-retour').addEventListener('click', () => {
@@ -376,19 +516,19 @@ function afficherDuas(liste) {
   const conteneur = $('#liste-duas');
   conteneur.innerHTML = '';
   liste.forEach((d) => {
-    const div = document.createElement('div');
-    div.className = 'dua';
-    div.innerHTML = `
-      <h4>${d.titre}</h4>
-      <p class="arabe">${d.ar}</p>
-      <p class="translit">${d.translit}</p>
-      <p>${d.fr}</p>
-      <button class="btn-copier secondaire">Copier</button>`;
-    div.querySelector('.btn-copier').addEventListener('click', (e) => {
+    const div = creer('div', 'dua');
+    div.appendChild(creer('h4', '', d.titre));
+    div.appendChild(creer('p', 'arabe', d.ar));
+    div.appendChild(creer('p', 'translit', d.translit));
+    div.appendChild(creer('p', '', d.fr));
+
+    const btn = creer('button', 'btn-copier secondaire', 'Copier');
+    btn.addEventListener('click', () => {
       navigator.clipboard.writeText(`${d.ar}\n${d.translit}\n${d.fr}`);
-      e.target.textContent = 'Copié ✅';
-      setTimeout(() => (e.target.textContent = 'Copier'), 1500);
+      btn.textContent = 'Copié ✅';
+      setTimeout(() => (btn.textContent = 'Copier'), 1500);
     });
+    div.appendChild(btn);
     conteneur.appendChild(div);
   });
 }
@@ -405,20 +545,20 @@ afficherDuas(DUAS);
 //  4. TASBIH
 // =====================================================
 const DHIKRS = [
-  { nom: 'SubhanAllah',      ar: 'سُبْحَانَ اللَّهِ' },
-  { nom: 'Alhamdulillah',    ar: 'الْحَمْدُ لِلَّهِ' },
-  { nom: 'Allahu Akbar',     ar: 'اللَّهُ أَكْبَرُ' },
-  { nom: 'Astaghfirullah',   ar: 'أَسْتَغْفِرُ اللَّهَ' },
+  { nom: 'SubhanAllah',         ar: 'سُبْحَانَ اللَّهِ' },
+  { nom: 'Alhamdulillah',       ar: 'الْحَمْدُ لِلَّهِ' },
+  { nom: 'Allahu Akbar',        ar: 'اللَّهُ أَكْبَرُ' },
+  { nom: 'Astaghfirullah',      ar: 'أَسْتَغْفِرُ اللَّهَ' },
   { nom: 'La ilaha illa Allah', ar: 'لَا إِلَهَ إِلَّا اللَّهُ' },
 ];
 
+const cleTotalJour = 'hafiz-total-' + new Date().toDateString();
 let compteur = 0;
-let totalJour = Number(localStorage.getItem('nour-total-' + new Date().toDateString())) || 0;
+let totalJour = Number(lire(cleTotalJour, '0')) || 0;
 
 DHIKRS.forEach((d, i) => {
-  const opt = document.createElement('option');
+  const opt = creer('option', '', d.nom);
   opt.value = i;
-  opt.textContent = d.nom;
   $('#dhikr').appendChild(opt);
 });
 
@@ -434,7 +574,7 @@ function majCompteur() {
 $('#btn-compter').addEventListener('click', () => {
   compteur++;
   totalJour++;
-  localStorage.setItem('nour-total-' + new Date().toDateString(), totalJour);
+  ecrire(cleTotalJour, totalJour);
   majCompteur();
 
   const objectif = Number($('#objectif').value);
@@ -450,5 +590,106 @@ $('#btn-compter').addEventListener('click', () => {
 $('#btn-reset').addEventListener('click', () => { compteur = 0; majCompteur(); });
 $('#dhikr').addEventListener('change', () => { compteur = 0; majDhikr(); majCompteur(); });
 
+// Envoie le dhikr en cours vers la page Sadaqa Jariya
+$('#btn-dedier').addEventListener('click', () => {
+  const quantite = compteur > 0 ? compteur : totalJour;
+  if (quantite === 0) return alert("Compte d'abord quelques dhikr, puis dédie-les.");
+  $('#sj-type').value = 'tasbih';
+  $('#sj-detail').value = DHIKRS[$('#dhikr').value].nom;
+  $('#sj-qte').value = quantite;
+  activerOnglet('sadaqa');
+  $('#sj-nom').focus();
+});
+
 majDhikr();
 majCompteur();
+
+
+// =====================================================
+//  5. SADAQA JARIYA
+//  La liste est enregistrée sur l'appareil de chaque personne.
+// =====================================================
+const TYPES_SJ = {
+  tasbih: '📿 Tasbih / Dhikr',
+  coran:  '📖 Lecture du Coran',
+  dua:    '🤲 Dua',
+  sadaqa: '💝 Aumône',
+  autre:  '✨ Bonne action',
+};
+
+let dedicaces = [];
+try { dedicaces = JSON.parse(lire('hafiz-dedicaces', '[]')) || []; } catch (e) { dedicaces = []; }
+
+function sauverDedicaces() {
+  ecrire('hafiz-dedicaces', JSON.stringify(dedicaces));
+}
+
+function afficherDedicaces() {
+  const liste = $('#sj-liste');
+  liste.innerHTML = '';
+
+  const noms = new Set(dedicaces.map((d) => d.nom.toLowerCase()));
+  $('#sj-total').textContent = dedicaces.length;
+  $('#sj-noms').textContent = noms.size;
+
+  if (dedicaces.length === 0) {
+    liste.appendChild(creer('p', 'petit', 'Aucune dédicace pour le moment.'));
+    return;
+  }
+
+  dedicaces.forEach((d) => {
+    const ligne = creer('div', 'dedicace');
+    const info = creer('div', 'info');
+
+    const titre = creer('div', '');
+    titre.appendChild(creer('span', 'nom-sj', d.nom));
+    titre.appendChild(document.createTextNode(` · ${TYPES_SJ[d.type] || d.type} ×${d.qte}`));
+    info.appendChild(titre);
+
+    const sous = d.detail ? `${d.detail} · ${d.date}` : d.date;
+    info.appendChild(creer('div', 'petit', sous));
+
+    const supprimer = creer('button', 'btn-suppr', '✕');
+    supprimer.title = 'Supprimer';
+    supprimer.addEventListener('click', () => {
+      dedicaces = dedicaces.filter((x) => x.id !== d.id);
+      sauverDedicaces();
+      afficherDedicaces();
+    });
+
+    ligne.appendChild(info);
+    ligne.appendChild(supprimer);
+    liste.appendChild(ligne);
+  });
+}
+
+$('#btn-sj-ajouter').addEventListener('click', () => {
+  const nom = $('#sj-nom').value.trim();
+  const qte = Math.floor(Number($('#sj-qte').value));
+  if (!nom) return alert('Entre un nom.');
+  if (!qte || qte < 1) return alert('Entre une quantité valide.');
+
+  dedicaces.unshift({
+    id: Date.now(),
+    nom,
+    type: $('#sj-type').value,
+    detail: $('#sj-detail').value.trim(),
+    qte,
+    date: new Date().toLocaleDateString('fr-FR'),
+  });
+  sauverDedicaces();
+  afficherDedicaces();
+  $('#sj-detail').value = '';
+});
+
+$('#btn-partager').addEventListener('click', async () => {
+  const texte = "Découvre الحافظ : horaires de prière, Coran, duas et tasbih. Partager un savoir utile est une sadaqa jariya 🤍";
+  const url = window.location.href;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'الحافظ', text: texte, url }); } catch (e) { /* annulé */ }
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(texte + ' ' + url), '_blank');
+  }
+});
+
+afficherDedicaces();

@@ -3,15 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nour - Prières, Coran et Duas</title>
+  <meta name="description" content="الحافظ - Horaires de prière avec rappel, Coran avec traductions, duas, tasbih et sadaqa jariya.">
+  <title>الحافظ - Prières, Coran, Duas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="logo.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header class="entete">
-    <h1>نور <span>Nour</span></h1>
+    <img src="logo.png" alt="Logo الحافظ" class="logo" onerror="this.style.display='none'">
+    <h1>الحافظ</h1>
+    <p class="sous-titre">Al-Hafiz · Prières, Coran, Duas et Dhikr</p>
     <p id="date-hijri"></p>
   </header>
 
@@ -20,6 +24,7 @@
     <button class="tab" data-target="coran">📖 Coran</button>
     <button class="tab" data-target="duas">🤲 Duas</button>
     <button class="tab" data-target="tasbih">📿 Tasbih</button>
+    <button class="tab" data-target="sadaqa">💝 Sadaqa Jariya</button>
   </nav>
 
   <main>
@@ -33,8 +38,10 @@
         <p id="lieu" class="petit"></p>
       </div>
 
+      <div id="liste-prieres" class="grille"></div>
+
       <div class="carte">
-        <h3>Choisir le lieu</h3>
+        <h3>📍 Choisir le lieu</h3>
         <div class="formulaire">
           <input type="text" id="ville" placeholder="Ville (ex : Lagos)">
           <input type="text" id="pays" placeholder="Pays (ex : Nigeria)">
@@ -49,10 +56,9 @@
           <button id="btn-chercher">Chercher</button>
           <button id="btn-geo" class="secondaire">📍 Me localiser</button>
         </div>
-        <button id="btn-notif" class="secondaire">🔔 Activer les rappels</button>
+        <button id="btn-notif" class="secondaire">🔔 Activer les notifications</button>
+        <p class="petit">Active les notifications et garde cet onglet ouvert pour recevoir un rappel à l'heure de chaque prière.</p>
       </div>
-
-      <div id="liste-prieres" class="grille"></div>
     </section>
 
     <!-- ================= CORAN ================= -->
@@ -65,7 +71,23 @@
       <div id="vue-lecture" class="cache">
         <button id="btn-retour" class="secondaire">← Retour</button>
         <h2 id="titre-sourate"></h2>
+
+        <div class="reglages">
+          <label>Lecteur
+            <select id="lecteur-choix"></select>
+          </label>
+          <label>Traduction
+            <select id="traduction-choix">
+              <option value="fr">Français (Hamidullah)</option>
+              <option value="en">English (Saheeh International)</option>
+              <option value="fr,en">Français + English</option>
+              <option value="none">Arabe seulement</option>
+            </select>
+          </label>
+        </div>
+
         <audio id="lecteur" controls></audio>
+        <p id="msg-audio" class="petit"></p>
         <div id="versets"></div>
       </div>
     </section>
@@ -89,9 +111,65 @@
           <option value="0">Sans limite</option>
         </select></p>
         <button id="btn-compter">Compter</button>
-        <button id="btn-reset" class="secondaire">Remettre à zéro</button>
+        <div class="boutons-ligne">
+          <button id="btn-reset" class="secondaire">Remettre à zéro</button>
+          <button id="btn-dedier" class="secondaire">💝 Dédier ce dhikr</button>
+        </div>
         <p class="petit">Total aujourd'hui : <strong id="total-jour">0</strong></p>
       </div>
+    </section>
+
+    <!-- ================= SADAQA JARIYA ================= -->
+    <section id="sadaqa" class="section">
+
+      <div class="carte">
+        <h3>💝 Sadaqa Jariya</h3>
+        <p>La sadaqa jariya est une aumône continue : une bonne action dont le bénéfice se poursuit dans le temps.</p>
+        <p class="hadith">« Lorsque l'homme meurt, ses œuvres s'interrompent, sauf trois : une aumône continue, une science dont on tire profit, ou un enfant pieux qui invoque en sa faveur. » <span class="petit">(rapporté par Muslim)</span></p>
+      </div>
+
+      <div class="carte">
+        <h3>Dédier une bonne action</h3>
+        <p class="petit">Choisis le nom de la personne pour qui tu fais cette œuvre (toi, un proche, un défunt...). Chacun peut utiliser cette page avec le nom de son choix.</p>
+        <div class="sj-form">
+          <input type="text" id="sj-nom" maxlength="40" placeholder="Nom au choix">
+          <select id="sj-type">
+            <option value="tasbih">📿 Tasbih / Dhikr</option>
+            <option value="coran">📖 Lecture du Coran</option>
+            <option value="dua">🤲 Dua</option>
+            <option value="sadaqa">💝 Aumône (sadaqa)</option>
+            <option value="autre">✨ Autre bonne action</option>
+          </select>
+          <input type="text" id="sj-detail" maxlength="60" placeholder="Précision (facultatif) : ex. SubhanAllah, sourate Al-Baqara...">
+          <input type="number" id="sj-qte" min="1" value="33" placeholder="Quantité">
+          <button id="btn-sj-ajouter">Ajouter à ma liste</button>
+        </div>
+        <p class="petit">Ta liste est enregistrée uniquement sur cet appareil.</p>
+        <p class="petit">Les savants divergent sur certaines œuvres dédiées à un défunt (comme la lecture du Coran). L'invocation et l'aumône font consensus. Renseigne-toi auprès d'une personne de science.</p>
+      </div>
+
+      <div class="carte">
+        <h3>Ma liste</h3>
+        <div class="stats-sj">
+          <div class="stat"><strong id="sj-total">0</strong><span class="petit">dédicaces</span></div>
+          <div class="stat"><strong id="sj-noms">0</strong><span class="petit">noms</span></div>
+        </div>
+        <div id="sj-liste"></div>
+      </div>
+
+      <div class="carte">
+        <h3>Idées de sadaqa jariya</h3>
+        <ul class="idees">
+          <li>Contribuer à un puits ou à un point d'eau</li>
+          <li>Planter un arbre</li>
+          <li>Offrir ou financer des exemplaires du Coran</li>
+          <li>Soutenir une mosquée ou une école</li>
+          <li>Parrainer les études d'un enfant</li>
+          <li>Partager un savoir utile, comme ce site</li>
+        </ul>
+        <button id="btn-partager">📤 Partager ce site</button>
+      </div>
+
     </section>
 
   </main>
